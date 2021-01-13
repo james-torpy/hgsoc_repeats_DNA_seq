@@ -35,6 +35,3 @@ for i in 1 5; do
   ssh jt3341@gadi.nci.org.au rm $temp_dir/$filename
   
 done
-
-samtools quickcheck -v $out_dir/*.bam > $out_dir/bad_bams.fofn && echo 'all ok' || 
-  echo 'some files failed check, see bad_bams.fofn'

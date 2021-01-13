@@ -12,7 +12,7 @@ genome_dir="genome/"
 source /home/jamtor/.bashrc
 conda activate py2.7
 
-mkdir -p $manta_dir/AOCS-063-sub
+mkdir -p $manta_dir/$sample
 
 configManta.py \
 --region chr1 --region chr2 --region chr3 \
@@ -28,4 +28,4 @@ configManta.py \
 --referenceFasta ../../$genome_dir/GRCh38.primary_assembly.genome.fa \
 --runDir $project_dir/$manta_dir/$sample
 
-../../$manta_dir/AOCS-063-sub/runWorkflow.py -m local -j 15
+../../$manta_dir/$sample/runWorkflow.py -m local -j 15
