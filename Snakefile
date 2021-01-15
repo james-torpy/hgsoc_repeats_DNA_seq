@@ -1,5 +1,5 @@
 # Run command:
-# snakemake --reason --use-conda --cores 200 --cluster-config cluster.json --cluster 'qsub -pe smp {cluster.cores} -N cnv_ident.smk -wd '/share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/logs' -b y -j y -V -P TumourProgression' -j 9
+# snakemake --reason --use-conda --cores 140 --cluster-config cluster.json --cluster 'qsub -pe smp {cluster.cores} -N cnv_ident.smk -wd '/share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/logs' -b y -j y -V -P TumourProgression' -j 4
 
  # DAG command:
  # snakemake --dag | dot -Tsvg > dag.svg
@@ -31,10 +31,11 @@ manta_bin = '/g/data1a/ku3/jt3341/local/lib/manta-1.5.0/bin/'
 
 SAMPLES = list([
 #    "AOCS-063-sub"
-	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092"
-#    "AOCS-063", "AOCS-064", "AOCS-065", "AOCS-075", 
-#    "AOCS-076", "AOCS-077", "AOCS-078", "AOCS-080", 
-#    "AOCS-083", "AOCS-084", "AOCS-085", "AOCS-086", 
+	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092",
+    "AOCS-063", "AOCS-064", "AOCS-065", 
+    "AOCS-075", "AOCS-076", "AOCS-077", "AOCS-078", 
+    "AOCS-080", "AOCS-083", "AOCS-084", "AOCS-085" 
+#    "AOCS-086", 
 #    "AOCS-090", "AOCS-091", "AOCS-092", "AOCS-093", 
 #    "AOCS-094", "AOCS-095", "AOCS-107", "AOCS-108", 
 #    "AOCS-109", "AOCS-111", "AOCS-112", "AOCS-113", 
@@ -102,10 +103,10 @@ rule sort1:
     shell:
         'mkdir -p logs/sort1; ' + 
         'cd logs/sort1; ' + 
-        env_dir + 'samtools sort -n -@ 6 ../../{input.bamin1} -o ' + 
+        env_dir + 'samtools sort -n -@ 10 ../../{input.bamin1} -o ' + 
         	'../../{output.bamout1} 2> {wildcards.sample}.sort1a.errors; ' +
         'rm ../../{input.bamin1}; ' +
-        env_dir + 'samtools sort -n -@ 6 ../../{input.bamin2} -o ' + 
+        env_dir + 'samtools sort -n -@ 10 ../../{input.bamin2} -o ' + 
         	'../../{output.bamout2} 2> {wildcards.sample}.sort1a.errors; ' +
         'rm ../../{input.bamin2}'
 
@@ -120,7 +121,7 @@ rule bam2fastq:
         fq2a = fq_dir + '{sample}-1-R1.fq',
         fq2b = fq_dir + '{sample}-1-R2.fq',
         fq_2single = fq_dir + '{sample}-1-singles.fq',
-    threads: 8
+    threads: 15
     shell:
         'mkdir -p logs/bam2fastq; ' + 
         'cd logs/bam2fastq; ' + 
@@ -149,13 +150,13 @@ rule bwa_align:
     shell:
         'mkdir -p logs/bwa_align; ' + 
         'cd logs/bwa_align; ' + 
-        env_dir + 'bwa mem -t 10 ' + genome_dir + 
+        env_dir + 'bwa mem -t 35 ' + genome_dir + 
             'GRCh38.primary_assembly.genome.fa ../../{input.fq1a} ' +
             '../../{input.fq1b} > ../../{output.sam1}; ' +
        	'rm ../../{input.fq1a}; ' + 
        	'rm ../../{input.fq1b}; ' + 
        	'rm ../../{input.fq_1single}; ' + 
-        env_dir + 'bwa mem -t 10 ' + genome_dir + 
+        env_dir + 'bwa mem -t 35 ' + genome_dir + 
             'GRCh38.primary_assembly.genome.fa ../../{input.fq2a} ' +
             '../../{input.fq2b} > ../../{output.sam2}; ' +
        	'rm ../../{input.fq2a}; ' + 

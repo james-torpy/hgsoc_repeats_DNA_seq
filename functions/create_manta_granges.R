@@ -65,7 +65,8 @@ create_manta_granges <- function(
         end = manta_bp$pos+(bp_window/2)
       ),
       strand = Rle("*"),
-      bp = manta_bp$pos
+      bp = manta_bp$pos,
+      sample = samp_name
     )
   )
 

@@ -48,7 +48,8 @@ create_svaba_granges <- function(
         end = svaba_bp$pos+(bp_window/2)
       ),
       strand = Rle("*"),
-      bp = svaba_bp$pos
+      bp = svaba_bp$pos,
+      sample = samp_name
     )
   )
 
