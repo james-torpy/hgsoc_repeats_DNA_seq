@@ -200,16 +200,27 @@ if (
 
   saveRDS(
     low_conf_bp, 
-    paste0(Robject_dir, "non_overlapping_consensus_low_conf_breakpoints.Rdata")
+    paste0(
+      Robject_dir, 
+      "non_overlapping_consensus_low_conf_breakpoints.Rdata"
+    )
   )
 
 } else {
 
   low_conf_bp <- readRDS(
-    paste0(Robject_dir, "non_overlapping_consensus_low_conf_breakpoints.Rdata")
+    paste0(
+      Robject_dir, 
+      "non_overlapping_consensus_low_conf_breakpoints.Rdata"
+    )
   )
 
 }
+
+# add other breakpoints to get all possible breakpoints:
+all_possible_bp <- c(
+  low_conf_bp, unlist(as(all_sample_bp, "GRangesList"))
+)
 
 # Sanity check:
 # Just to check that statistics are working as they should, I 
@@ -218,14 +229,24 @@ if (
 # regions and random regions
 
 # load genome breakpoints:
-all_bp <- readRDS(paste0(Robject_dir, "all_breakpoints.Rdata"))
+all_sample_bp <- readRDS(paste0(Robject_dir, "all_breakpoints.Rdata"))
 
 # add 10 kb either side:
-all_bp_windows <- lapply(all_bp, function(x) {
+all_sample_bp_windows <- lapply(all_sample_bp, function(x) {
   start(x) <- start(x) - overlap_window
   end(x) <- end(x) + overlap_window
   return(x)
 })
+
+# add total sample breakpoints and remove overlaps:
+all_sample_bp_windows[["total_sample"]] <- unlist(
+  as(
+    all_sample_bp_windows, "GRangesList"
+  )
+)
+all_sample_bp_windows[["total_sample"]] <- remove_overlaps(
+  all_sample_bp_windows[["total_sample"]]
+)
 
 # retrieve chromosome lengths for random region control:
 chr_lengths <- as.data.frame(SeqinfoForUCSCGenome("hg38"))
@@ -246,87 +267,104 @@ random_bp <- generateRandomPos(
   1000, rownames(chr_lengths), chr_lengths$seqlengths
 )
 
-#chr_lengths$cum_sum <- cumsum(as.numeric(chr_lengths$seqlengths))
-#chr_lengths$cum_start <- c(1, chr_lengths$cum_sum[1:(nrow(chr_lengths)-1)])
-#chr_lengths$cum_end <- chr_lengths$cum_sum
-#
-## create list of cumulative chromosome intervals:
-#for (r in 1:nrow(chr_lengths)) {
-#  if (r==1) {
-#    cum_chr_int <- list(chr_lengths$cum_start[r]:chr_lengths$cum_end[r])
-#    names(cum_chr_int) <- rownames(chr_lengths)[r]
-#  } else {
-#    cum_chr_int[[r]] <- chr_lengths$cum_start[r]:chr_lengths$cum_end[r]
-#    names(cum_chr_int) <- rownames(chr_lengths)[r]
-#  }
-#}
-#
-## pick 1000 random start positions:
-#random_starts <- sample(1:max(chr_lengths$cum_sum), 1000)
-#
-## assign to chromosomes and chromosomal positions:
-#starts <- lapply(cum_chr_int, function(x) {
-#  which(random_starts)
-#})
+# expand random positions by 20099 bp:
+start(random_bp) <- start(random_bp) - 10099
+end(random_bp) <- end(random_bp) + 10000
 
+# add to all_sample_bp_windows:
+all_sample_bp_windows <- append(all_sample_bp_windows, random_bp)
 
-for (i in 1:length(all_bp)) {
+# create empty list for output:
+output <- list()
 
-  repeats[["control"]] <- all_bp[[i]][1:100]
+for (i in 1:length(all_sample_bp_windows)) {
 
-  ########################################################################
-  ### 2. Fetch a list of regions that you want to look into overlaps 
-  # with ###
-  ########################################################################
+  # add positive control coordinates to repeats list, consisting of 100
+  # bp window ranges:
+  repeats[["positive_control"]] <- all_sample_bp_windows[[i]][1:100]
 
-  # add to granges list: a) all regions b) target regions per sample 
-  # c) control regions with ~1000 random regions
-  breakPoints <- GRangesList()
-  breakPoints[["all"]] <- low_conf_bp
-  breakPoints[["target"]] <- all_bp_windows[[i]]
-  breakPoints[["random"]] <- random_bp
-
-  #the analysis is performed using fisher test
-  results <- list()
-  counts <- list()
+  # set up output lists:
+  overlaps <- list()
   output <- list()
 
-  for (repeatName in names(repeats)) {
+  for (RT_name in names(repeats)) {
 
-    # fraction of number of overlaps between set of breakpoints
-    # and retrotransposon ranges vs number of breakpoints in set: 
-    results[[repeatName]] <- sapply(breakPoints, function(x) {
-      sum(
-        countOverlaps(
-          x, repeats[[repeatName]], ignore.strand=T
-        ) > 0
-      )/length(x)
-    })
-
-    # number of overlaps between set of breakpoints
-    # and retrotransposon ranges:
-    counts[[repeatName]] <- sapply(breakPoints, function(x) {
-      sum(
-        countOverlaps(
-          x,repeats[[repeatName]], ignore.strand=T
-        ) > 0
+    if (
+      !(RT_name == "positive_control" & 
+          names(all_sample_bp_windows)[i] == "negative_control"
       )
-    })
+    ) {
 
-    # number of total possible breakpoints:
-    nAll = length(breakPoints[["all"]])
+      # set up objects with all possible bp, and sample bp:
+      breakpoints <- GRangesList()
+      breakpoints[["sample"]] <- all_sample_bp_windows[[i]]
+      breakpoints[["all_possible"]] <- all_possible_bp
+    
+      # fetch co-ordinates of retrotransposon:
+      RT <- repeats[[RT_name]]
+    
+      # detect overlaps between each set of breakpoints and RT coordinates:
+      overlaps[[RT_name]] <- sapply(breakpoints, function(x) {
+        sum(
+          countOverlaps(x, RT, ignore.strand=TRUE) > 0
+        )
+      })
+    
+      # no of overlaps of breakpoints in genome and repeat co-ordinates:
+      breakR <- overlaps[[RT_name]][["sample"]]
+      # no of overlaps of repeat and all possible breakpoints - breakR:
+      NbreakR <- overlaps[[RT_name]][["all_possible"]] - breakR
+      # no of breakpoints in genome - breakR:
+      breakNR <- length(breakpoints[["sample"]]) - breakR
+      # no of all possible breakpoints - no of breakpoints in genome - 
+      # no of overlaps of repeat and all possible breakpoints
+      NbreakNR <- length(breakpoints[["all_possible"]]) - 
+        length(breakpoints[["sample"]]) -
+        overlaps[[RT_name]][["all_possible"]]
+    
+      output[[RT_name]] <- fisher.test(
+        matrix(c(breakR, breakNR, NbreakR, NbreakNR), nrow=2)
+        , alternative="greater"
+      )
 
-    # number of detected breakpoints:
-    nTarget = length(breakPoints[["target"]])
+    }
 
-    bp_RT <- counts[[repeatName]][3]
-    bp_no_RT < -nTarget-counts[[repeatName]][3]
-    no_bp_RT <- counts[[repeatName]][5]-counts[[repeatName]][3]
-    no_bp_no_RT <- n-nTarget-counts[[repeatName]][5]
-    output[[repeatName]]<-fisher.test(matrix(c(upR,upNR,NupR,NupNR),nrow=2),alternative=“greater”)
   }
+
+  if (length(overlaps) > 0) {
+
+    RT_bp_overlaps <- do.call("rbind", overlaps)
+
+    if (i==1) {
+
+      all_outputs <- list(output)
+      names(all_outputs)[i] <- names(all_sample_bp_windows)[i]
+
+      all_pvals <- list(lapply(output, function(x) x$p.value))
+      names(all_pvals)[i] <- names(all_sample_bp_windows)[i]
   
-  dfC<-do.call("rbind",counts)
-  #check the results in the output object
+      all_overlaps <- list(RT_bp_overlaps)
+      names(all_overlaps)[i] <- names(all_sample_bp_windows)[i]
+  
+    } else {
+  
+      all_outputs[[i]] <- output
+      names(all_outputs)[i] <- names(all_sample_bp_windows)[i]
+
+      all_pvals[[i]] <- lapply(output, function(x) x$p.value)
+      names(all_pvals)[i] <- names(all_sample_bp_windows)[i]
+  
+      all_overlaps[[i]] <- RT_bp_overlaps
+      names(all_overlaps)[i] <- names(all_sample_bp_windows)[i]
+  
+    }
+
+  }
 
 }
+
+all_pvals <- lapply(all_pvals, unlist)
+sig_pvals <- lapply(all_pvals, function(x) x[x<0.1])
+
+
+

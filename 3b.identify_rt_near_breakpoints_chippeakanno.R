@@ -14,11 +14,16 @@ col_dir <- paste0(home_dir, "R/colour_palettes/")
 
 RNA_name <- "hgsoc_repeats/RNA-seq-final"
 RNA_dir <- paste0(home_dir, "projects/", RNA_name, "/")
+DE_dir <- paste0(RNA_dir, "results/DE/without_primary_ascites/")
+
 cancer_vs_ctl_dir <- paste0(
-  RNA_dir, "/results/DE/site/primary_vs_FT/tables/"
+  DE_dir, "site/primary_vs_FT/tables/"
 )
 recurrent_vs_primary_dir <- paste0(
-  RNA_dir, "/results/DE/site/recurrent_vs_primary/tables/"
+  DE_dir, "site/recurrent_vs_primary/tables/"
+)
+resistant_vs_sensitive_dir <- paste0(
+  DE_dir, "drug_response/resistant_vs_sensitive/tables/"
 )
 
 out_dir <- paste0(results_dir, "bp_assoc_RT/")
@@ -31,7 +36,9 @@ plot_dir <- paste0(out_dir, "plots/")
 system(paste0("mkdir -p ", plot_dir))
 
 overlap_window <- 10000
-active_RT <- c("L1PA2", "L1HS", "AluYk2", "AluYd8", "AluYb8", "AluYh3")
+active_RT <- c(
+  "L1PA2", "L1HS", "AluYk2", "AluYd8", "AluYb8", "AluYh3", "AluYh9"
+)
 
 
 ########################################################################
@@ -39,6 +46,7 @@ active_RT <- c("L1PA2", "L1HS", "AluYk2", "AluYd8", "AluYb8", "AluYh3")
 ########################################################################
 
 library(GenomicRanges)
+library(rtracklayer)
 library(ChIPpeakAnno)
 
 create_svaba_granges <- dget(paste0(func_dir, "create_svaba_granges.R"))
@@ -202,23 +210,30 @@ top_prim_vs_rec_RT_symbols <- return_top_DE(
   down_filename = "recurrent_vs_primary_downregulated_retrotransposon.txt"
 )
 
-top_both_symbols <- top_prim_vs_rec_RT_symbols[
-  top_prim_vs_rec_RT_symbols %in% top_RT_symbols
-]
+# load retrotransposons DE drug resistant vs sensitive cancer:
+top_resistant_vs_sensitive_RT_symbols <- return_top_DE(
+  in_dir = resistant_vs_sensitive_dir,
+  up_filename = "resistant_vs_sensitive_GIN_upregulated_retrotransposon.txt",
+  down_filename = "resistant_vs_sensitive_GIN_downregulated_retrotransposon.txt"
+)
 
 top_RT_symbols <- unique(
   c(
     top_RT_symbols, 
-    top_both_symbols, 
+    top_prim_vs_rec_RT_symbols, 
+    top_resistant_vs_sensitive_RT_symbols,
     active_RT
   )
 )
 
+# manually add that DE for known vs unknown GIN:
+top_RT_symbols <- c(top_RT_symbols, "HERVK11D-int")
+
 # take coordinates of top RTs:
 top_RT <- repeat_gtf[repeat_gtf$type %in% top_RT_symbols]
 
-# remove duplicate range entry of L1HS/L1PA2:
-top_RT <- top_RT[-1780]
+# remove duplicate entries of L1HS/L1PA2:
+top_RT <- top_RT[-which(duplicated(top_RT)),]
 
 
 ########################################################################
@@ -227,6 +242,10 @@ top_RT <- top_RT[-1780]
 
 # find overlaps and record details in breakpoint granges:
 for (i in 1:length(all_bps)) {
+
+  # number names of ranges to prevent bug:
+  names(all_bps[[i]]) <- 1:length(all_bps[[i]])
+  names(top_RT) <- 1:length(top_RT)
 
   olaps <- findOverlapsOfPeaks(all_bps[[i]], top_RT, maxgap = 10000)
 
@@ -330,9 +349,11 @@ bp_assoc_no_df <- data.frame(
   per_genome = bp_assoc_no_per_genome
 )
 
-bp_assoc_no_df <- bp_assoc_no_df[
-  order(bp_assoc_no_df$per_genome, decreasing = T),
-]
+bp_assoc_no_df <- dplyr::arrange(
+  bp_assoc_no_df, 
+  desc(total), 
+  desc(per_genome), 
+)
 
 write.table(
   bp_assoc_no_df,

@@ -10,7 +10,21 @@ out_dir <- paste0(out_path, "/CNV_data/")
 
 dir.create(out_dir, recursive = T)
 
+library(dplyr)
 library(RTCGA)
+
+# create liftover function:
+do_liftover <- function(gr, original, output) {
+
+  library(rtracklayer)
+
+  output <- gsub("h", "H", output)
+  chain <- import.chain(paste0(ref_dir, "liftover/", original, 
+    "To", output, ".over.chain"))
+
+  return(liftOver(gr, chain))
+
+}
 
 # check available datasets:
 checkTCGA('Dates')
@@ -22,44 +36,64 @@ checkTCGA('Dates')
 
 # check available datasets:
 avail_ds <- checkTCGA("DataSets", "OV", date = "2016-01-28")
-CNV_ds <- avail_ds[grep("CNV|CNA|gistic", avail_ds$Name, ignore.case = T),]
-
+CNV_ds <- avail_ds[grep("CNA", avail_ds$Name, ignore.case = T),]
 
 # specify dataset details:
 releaseDate <- "2016-01-28"
 cohort <- "OV"
-datasets <- c("")
+datasets <- CNV_ds$Name
 
 # download data:
-for (cohort in cohorts) {
-  try(downloadTCGA( cancerTypes = cohort, destDir = raw_dir, 
-  	date = releaseDate, 
-  	dataSet = "" ),
+for (dataset in datasets) {
+  try(downloadTCGA(
+    cancerTypes = cohort, 
+    destDir = raw_dir, 
+    date = releaseDate, 
+    dataSet = dataset
+    ),
     silent=TRUE
   )
 }
 
 # read and format data:
-allCNVFiles <- list.files(
-  raw_dir, pattern = "cnv", recursive = TRUE, full.names = TRUE
+all_cna_files <- list.files(
+  raw_dir, pattern = "cna", recursive = TRUE, full.names = TRUE
 )
 
-for (CNVFile in allCNVFiles) {
 
-  CNV <- read.table(CNVFile,h=T) 
-   
-  cohortName <- strsplit(
-  	strsplit(CNVFile, split = "/"
-  )[[1]][4], "\\.")[[1]][1]
-  name = paste0(cohortName, ".CNV")
-  assign(name, CNV)
-  save(
-    list = name, 
-    file=paste0(out_dir, name, ".rda"), 
-    compression_level = 9, 
-    compress = "xz"
+for (c in 1:length(all_cna_files)) {
+
+  # load CNAs:
+  CNA <- read.table(all_cna_files[c], header = T)
+
+  # change chromosome 23 and 24 to X and Y:
+  CNA$Chromosome[CNA$Chromosome == "23"] <- "X"
+
+  # convert to granges object:
+  CNA_gr <- GRanges(
+    seqnames = Rle(paste0("chr", CNA$Chromosome)),
+    ranges = IRanges(
+      start = CNA$Start, 
+      end = CNA$End
+    ),
+    strand = Rle("*")
   )
 
+  if ( length(grep("hg18", all_cna_files[c])) > 0 ) {
+    CNA_gr_test <- do_liftover(CNA_gr, "hg18", "hg38")
+  }
+
+  if ( length(grep("hg19", all_cna_files[c])) > 0 ) {
+    CNA_gr_test <- do_liftover(CNA_gr, "hg19", "hg38")
+  }
+
+  if (c==1) {
+    all_CNA <- CNA
+  } else {
+    all_CNA <- rbind(all_CNA, CNA)
+  }
+
 }
+   
 
 
