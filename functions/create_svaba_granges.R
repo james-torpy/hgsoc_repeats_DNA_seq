@@ -27,8 +27,6 @@ create_svaba_granges <- function(
     )
   )
   
-  svaba_bp <- svaba_bp[svaba_bp$type == "BND",]
-  
   # remove non-standard chromosomes:
   svaba_bp <- svaba_bp[grep("K|G|M", svaba_bp$chr, invert = T),]
   
@@ -49,6 +47,7 @@ create_svaba_granges <- function(
       ),
       strand = Rle("*"),
       bp = svaba_bp$pos,
+      CNV_type = svaba_bp$type,
       sample = samp_name
     )
   )
