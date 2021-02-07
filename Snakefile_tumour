@@ -1,0 +1,196 @@
+# Run command:
+# snakemake -s Snakefile_tumour --reason --use-conda --cores 180 --cluster-config cluster.json --cluster 'qsub -pe smp {cluster.cores} -N cnv_ident.smk -wd '/share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/logs' -b y -j y -V -P TumourProgression' -j 12
+
+# DAG command:
+# snakemake --snakefile Snakefile_tumour --dag | dot -Tsvg > dag.svg
+
+### This script remaps bams to hg38 and uses SvABA and Manta to identify 
+# breakpoints in HGSOC genomes ###
+
+# create quota record file:
+
+# check max quota used in quota_track.txt:
+# awk '{print $1}' /share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/quota_track.txt | \
+# grep -v GB | grep -v [a-zA-Z] | sort | uniq | tail -1
+
+# max genomes than can be run at one one time (based on 10 TB quota): 6, and 5 in queue
+
+# define directories:
+project_name = 'hgsoc_repeats'
+exp_name = 'DNA-seq'
+
+# define/create directories:
+home_dir = '/share/ScratchGeneral/jamtor/'
+project_dir = home_dir + 'projects/' + project_name + '/' + exp_name + '/'
+results_dir = project_dir + 'results/'
+genome_dir = project_dir + 'genome/'
+script_dir = project_dir + 'scripts/'
+
+
+conda_dir = "/share/ClusterShare/thingamajigs/jamtor/local/lib/miniconda3/"
+env_dir = conda_dir + "envs/py37/envs/snk/bin/"
+
+bam_dir = 'raw_files/bams/'
+temp_dir = project_dir + bam_dir + '/temp/'
+fq_dir = 'raw_files/fastq/'
+bwa_dir = 'results/bwa/'
+svaba_dir = 'results/svaba/'
+manta_dir = 'results/manta/'
+manta_bin = '/g/data1a/ku3/jt3341/local/lib/manta-1.5.0/bin/'
+
+#SAMPLES = list([
+##    "AOCS-063-sub"
+#	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092",
+#    "AOCS-063", "AOCS-064", "AOCS-065", "AOCS-075", 
+#    "AOCS-076", "AOCS-077", "AOCS-078", "AOCS-080", 
+#    "AOCS-083", "AOCS-084", "AOCS-085","AOCS-086", 
+#    "AOCS-090", "AOCS-091", "AOCS-092", "AOCS-093", 
+#    "AOCS-094", "AOCS-095", "AOCS-107", "AOCS-108", 
+#    "AOCS-109", "AOCS-111", "AOCS-112", "AOCS-113", 
+#    "AOCS-114", "AOCS-115", "AOCS-116", "AOCS-122", 
+#    "AOCS-123", "AOCS-124", "AOCS-125", "AOCS-126", 
+#    "AOCS-128", "AOCS-130", "AOCS-131", "AOCS-133", 
+#    "AOCS-137"
+#    #, "AOCS-143", "AOCS-144", "AOCS-145", 
+##    "AOCS-146", "AOCS-147", "AOCS-148", "AOCS-149", 
+##    "AOCS-153"
+#])
+
+# regenerate bams for:
+SAMPLES = list([
+    "AOCS-063-sub",
+    "AOCS-064", "AOCS-075", "AOCS-076", "AOCS-083", 
+    "AOCS-112", "AOCS-114", "AOCS-122",
+    "AOCS-128", "AOCS-130", "AOCS-133", "AOCS-137"
+    #"AOCS-080", "AOCS-085" 
+])
+
+## failed to transfer:
+#SAMPLES = list([
+#    "AOCS-152"
+#])
+
+rule all:
+    input:
+        expand(
+            bwa_dir + '{sample}-1.bam',
+            sample=SAMPLES
+        ),
+        expand(
+            bwa_dir + '{sample}-1.bam.bai',
+            sample=SAMPLES
+        )
+
+rule transfer:
+    output:
+        bam = 'raw_files/bams/{sample}-1.bam.gz'
+    threads: 2
+    shell:
+        'mkdir -p logs/transfer; ' + 
+        'cd logs/transfer; ' + 
+        ' ../../scripts/1.transfer_bam.sh' + 
+        ' {wildcards.sample}' +
+        ' true' + # tumour only?
+            ' 2> {wildcards.sample}.transfer.errors'
+
+rule gunzip:
+    input:
+        bamin = bam_dir + '{sample}-1.bam.gz'
+    output:
+        bamout = bam_dir + '{sample}-1.bam'
+    threads: 8
+    shell:
+        'mkdir -p logs/gunzip; ' + 
+        'cd logs/gunzip; ' + 
+        'pigz -d ../../{input.bamin}' +
+            ' 2> {wildcards.sample}.gunzip1.errors; ' + 
+        env_dir + 'samtools quickcheck -v {output.bamout} > ' + bam_dir + 
+            '/{wildcards.sample}_bad_bams.fofn && echo "bam ok" || ' + 
+            'echo "some files failed check, see bad_bams.fofn"'
+
+rule sort1:
+    input:
+        bamin = bam_dir + '{sample}-1.bam',
+    output:
+        bamout = bam_dir + '{sample}-1.sorted.by.name.bam'
+    threads: 10
+    shell:
+        'mkdir -p logs/sort1; ' + 
+        'cd logs/sort1; ' + 
+        env_dir + 'samtools sort -n -@ 10 ../../{input.bamin} -o ' + 
+        	'../../{output.bamout} 2> {wildcards.sample}.sort1a.errors; ' +
+        'rm ../../{input.bamin}'
+
+rule bam2fastq:
+    input:
+        bamin = bam_dir + '{sample}-1.sorted.by.name.bam'
+    output:
+        fq_a = fq_dir + '{sample}-1-R1.fq',
+        fq_b = fq_dir + '{sample}-1-R2.fq',
+        fq_single = fq_dir + '{sample}-1-singles.fq',
+    threads: 15
+    shell:
+        'mkdir -p logs/bam2fastq; ' + 
+        'cd logs/bam2fastq; ' + 
+        env_dir + 'samtools bam2fq -1 ../../{output.fq_a} ' +
+        ' -2 ../../{output.fq_b} -@ 15 -s ../../{output.fq_single} ' +
+        '../../{input.bamin} 2> {wildcards.sample}.bam2fastq1.errors; ' + 
+        'rm ../../{input.bamin}'
+
+rule bwa_align:
+    input:
+        fq_a = fq_dir + '{sample}-1-R1.fq',
+        fq_b = fq_dir + '{sample}-1-R2.fq',
+        fq_single = fq_dir + '{sample}-1-singles.fq',
+        ind = genome_dir + 'GRCh38.primary_assembly.genome.fa.amb'
+    output:
+        sam = bwa_dir + '{sample}-1.sam'
+    threads: 35
+    shell:
+        'mkdir -p logs/bwa_align; ' + 
+        'cd logs/bwa_align; ' + 
+        env_dir + 'bwa mem -t 35 ' + genome_dir + 
+            'GRCh38.primary_assembly.genome.fa ../../{input.fq_a} ' +
+            '../../{input.fq_b} > ../../{output.sam}; ' +
+       	'rm ../../{input.fq_a}; ' + 
+       	'rm ../../{input.fq_b}; ' + 
+       	'rm ../../{input.fq_single}'
+
+rule bam1:
+    input:
+        sam = bwa_dir + '{sample}-1.sam'
+    output:
+        bam = bwa_dir + '{sample}-1.unsorted.bam'
+    threads: 15
+    shell:
+        'mkdir -p logs/bam; ' + 
+        'cd logs/bam; ' + 
+        env_dir + 'samtools view -bh  -@ 15 ../../{input.sam} > ' +
+        	'../../{output.bam}; ' +
+        'rm ../../{input.sam}'
+
+rule sort2:
+    input:
+        unbam = bwa_dir + '{sample}-1.unsorted.bam'
+    output:
+        bam = bwa_dir + '{sample}-1.bam'
+    threads: 10
+    shell:
+        'mkdir -p logs/sort2; ' + 
+        'cd logs/sort2; ' + 
+        env_dir + 'samtools sort -@ 10 ../../{input.unbam} ' + 
+        	'-o ../../{output.bam} 2> {wildcards.sample}.sort2.errors; ' +
+        'rm ../../{input.unbam}'
+
+rule index:
+    input:
+        bam = bwa_dir + '{sample}-1.bam'
+    output:
+        bai = bwa_dir + '{sample}-1.bam.bai'
+    threads: 15
+    shell:
+        'mkdir -p logs/index; ' + 
+        'cd logs/index; ' + 
+        env_dir + 'samtools index -@ 15 ../../{input.bam}' +
+            ' 2> {wildcards.sample}.index1.errors'
+

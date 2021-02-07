@@ -75,6 +75,11 @@ DE_RT_bp_genes <- unlist(as(DE_RT_bp_genes, "GRangesList"))
 DE_RT_bp_genes$ensembl_id <- gsub("^.*\\.", "", names(DE_RT_bp_genes))
 names(DE_RT_bp_genes) <- NULL
 
+# remove unecessary cols:
+mcols(DE_RT_bp_genes) <- mcols(DE_RT_bp_genes)[
+  ,colSums(is.na(mcols(DE_RT_bp_genes))) < nrow(mcols(DE_RT_bp_genes))
+]
+
 write.table(
   as.data.frame(DE_RT_bp_genes),
   paste0(table_dir, "retrotransposon_breakpoint_assoc_DE_genes.txt"),
@@ -84,94 +89,187 @@ write.table(
   row.names = FALSE
 )
 
-final_gene_gr <- DE_RT_bp_genes
-mcols(final_gene_gr) <- subset(
-  mcols(final_gene_gr),
-  select = c(symbol, sample, logFC, FDR)
-)
-
-gene_symbols <- unique(final_gene_gr$symbol)
+gene_symbols <- unique(DE_RT_bp_genes$symbol)
 
 
 ########################################################################
 ### 3. Find retrotransposon breakpoint-assoc genes which are DE and 
-# reported CNA-associated by TGCA (from 489 HGSOC samples) ###
+# reported as cancer genes in OncoKB ###
 ########################################################################
 
-TGCA_cna <- read.table(
-  paste0(ref_dir, "TGCA/OV_CNV/CNA_genes.txt"),
-  header = T,
+oncokb <- read.table(
+  paste0(ref_dir, "oncokb_cancer_genes.txt"),
   sep = "\t",
+  header = T,
   stringsAsFactors = F
 )
-TGCA_cna_assoc <- gene_symbols[gene_symbols %in% TGCA_cna$Gene]
-TGCA_cna_assoc_gr <- DE_RT_bp_genes[
-  DE_RT_bp_genes$symbol %in% TGCA_cna_assoc
+
+oncokb_genes <- gene_symbols[gene_symbols %in% oncokb$symbol]
+
+# add custom cancer genes:
+cancer_genes <- c(
+  oncokb_genes,
+  "CXCR2", "TOX", "UBE2C", "FGF18"
+)
+
+cancer_assoc_gr <- DE_RT_bp_genes[
+  DE_RT_bp_genes$symbol %in% cancer_genes
 ]
 
-# add whether gain or loss:
-for (i in 1:length(TGCA_cna_assoc_gr)) {
-  
-  temp_info <- TGCA_cna[TGCA_cna$Gene == TGCA_cna_assoc_gr$symbol[i],]
+# remove NA columns:
+mcols(cancer_assoc_gr) <- mcols(cancer_assoc_gr)[
+  ,colSums(is.na(mcols(cancer_assoc_gr))) < nrow(mcols(cancer_assoc_gr))
+]
 
-  if (nrow(temp_info) == 1) {
-    TGCA_cna_assoc_gr$CNA[i] <- temp_info$CNA
-    TGCA_cna_assoc_gr$CNA_freq[i] <- temp_info$Freq
-    TGCA_cna_assoc_gr$CNA2[i] <- NA
-    TGCA_cna_assoc_gr$CNA2_freq[i] <- NA
-  } else {
-    TGCA_cna_assoc_gr$CNA[i] <- temp_info$CNA[1]
-    TGCA_cna_assoc_gr$CNA_freq[i] <- temp_info$Freq[1]
-    TGCA_cna_assoc_gr$CNA2[i] <- temp_info$CNA[2]
-    TGCA_cna_assoc_gr$CNA2_freq[i] <- temp_info$Freq[2]
-  }
+
+########################################################################
+### 4. Identify bp types and mates ###
+########################################################################
+
+# load all breakpoints:
+all_bp <- readRDS(paste0(Robject_dir, "all_breakpoints.Rdata"))
+all_bp <- unlist(as(all_bp, "GRangesList"))
+
+# fetch info for bps in cancer_assoc_gr:
+for (i in 1:2) {
+
+  info_gr <- all_bp[
+    all_bp$id %in% eval(
+      parse(
+        text = paste0("cancer_assoc_gr$bp", i, "_id")
+      )
+    ), 
+  ]
+  info_df <- data.frame(
+    id = as.character(info_gr$id),
+    info = info_gr$bp_info,
+    mate_id = gsub(
+      ";.*$", "",
+      gsub("^.*MATEID", "MATEID", info_gr$bp_info)
+    ),
+    stringsAsFactors = F
+  )
+
+  # fetch SV class:
+  temp_class <- strsplit(
+    as.character(info_df$info), ";"
+  )
+  info_df$class <- unlist(lapply(temp_class, function(x) x[[3]]))
+  info_df$class[grep("MAPQ", info_df$class)] <- NA
+
+  # remove info column:
+  info_df <- subset(info_df, select = -info)
+
+  colnames(info_df) <- c(
+    paste0("bp", i, "_id"), 
+    paste0("bp", i, "_mate_id"),
+    paste0("bp", i, "_class")
+  )
+
+  # merge with cancer_assoc_gr
+  mcols(cancer_assoc_gr) <- merge(
+    mcols(cancer_assoc_gr),
+    info_df,
+    by = paste0("bp", i, "_id"),
+    all = T
+  )
 
 }
 
+# format mate id column:
+cancer_assoc_gr$bp1_mate_id <- gsub(
+  "MATEID=", "", 
+  cancer_assoc_gr$bp1_mate_id
+)
+cancer_assoc_gr$bp2_mate_id <- gsub(
+  "MATEID=", "", 
+  cancer_assoc_gr$bp2_mate_id
+)
+
+# load low confidence breakpoints:
+low_conf <- readRDS(
+  paste0(Robject_dir, "all_low_confidence_breakpoints.Rdata")
+)
+
+# isolate all those from samples of interest:
+low_conf <- low_conf[names(low_conf) %in% cancer_assoc_gr$sample]
+low_conf <- unlist(as(low_conf, "GRangesList"))
+
+total_bp <- c(all_bp, low_conf)
+total_bp <- total_bp[!duplicated(total_bp)]
+total_bp$id <- as.character(total_bp$id)
+total_bp$bp_info <- as.character(total_bp$bp_info)
+total_bp$joining_nt <- as.character(total_bp$joining_nt)
+total_bp$join <- as.character(total_bp$join)
+
+# find chr, position and class for mates of first bp:
+m <- match(cancer_assoc_gr$bp1_mate_id, total_bp$id)
+
+cancer_assoc_gr$bp1_mate_chr <- seqnames(total_bp)[m]
+cancer_assoc_gr$bp1_mate_pos <- total_bp$bp[m]
+
+bp1_mate_class <- gsub("^.*HOMSEQ", "HOMSEQ", total_bp$bp_info[m])
+bp1_mate_class <- gsub("^.*INSERTION", "INSERTION", bp1_mate_class)
+bp1_mate_class <- gsub("^.*IMPRECISE", "IMPRECISE", bp1_mate_class)
+bp1_mate_class <- gsub(";.*$", "", bp1_mate_class)
+cancer_assoc_gr$bp1_mate_class <- gsub("^.*MAPQ.*$", "NONE", bp1_mate_class)
+
+# annotate breakpoint-mate joins:
+cancer_assoc_gr$bp1_joining_nt <- total_bp$joining_nt[m]
+cancer_assoc_gr$bp1_join <- total_bp$join[m]
+
+# find chr, position and class for mates of second bp:
+m <- match(cancer_assoc_gr$bp2_mate_id, total_bp$id)
+
+cancer_assoc_gr$bp2_mate_chr <- as.character(seqnames(total_bp))[m]
+cancer_assoc_gr$bp2_mate_pos <- total_bp$bp[m]
+
+bp2_mate_class <- gsub("^.*HOMSEQ", "HOMSEQ", total_bp$bp_info[m])
+bp2_mate_class <- gsub("^.*INSERTION", "INSERTION", bp2_mate_class)
+bp2_mate_class <- gsub("^.*IMPRECISE", "IMPRECISE", bp2_mate_class)
+bp2_mate_class <- gsub(";.*$", "", bp2_mate_class)
+cancer_assoc_gr$bp2_mate_class[1:length(m)] <- gsub("^.*MAPQ.*$", "NONE", bp2_mate_class)
+
+# annotate breakpoint-mate joins:
+cancer_assoc_gr$bp2_joining_nt <- total_bp$joining_nt[m]
+cancer_assoc_gr$bp2_join <- total_bp$join[m]
+
+# reorder mcols:
+cancer_assoc <- data.frame(
+  sample = cancer_assoc_gr$sample,
+  symbol = cancer_assoc_gr$symbol,
+  ensembl_id = cancer_assoc_gr$ensembl_id,
+  logFC = cancer_assoc_gr$logFC,
+  FDR = cancer_assoc_gr$FDR,
+  chr = seqnames(cancer_assoc_gr),
+  bp1_id = cancer_assoc_gr$bp1_id,
+  bp1_pos = cancer_assoc_gr$bp1_pos,
+  bp1_class = cancer_assoc_gr$bp1_class,
+  bp1_mate_id = cancer_assoc_gr$bp1_mate_id,
+  bp1_mate_chr = cancer_assoc_gr$bp1_mate_chr,
+  bp1_mate_pos = cancer_assoc_gr$bp1_mate_pos,
+  bp1_mate_class = cancer_assoc_gr$bp1_mate_class,
+  bp1_joining_nt = cancer_assoc_gr$bp1_joining_nt,
+  bp1_join = cancer_assoc_gr$bp1_join,
+  bp2_id = cancer_assoc_gr$bp2_id,
+  bp2_pos = cancer_assoc_gr$bp2_pos,
+  bp2_class = cancer_assoc_gr$bp2_class,
+  bp2_mate_id = cancer_assoc_gr$bp2_mate_id,
+  bp2_mate_chr = cancer_assoc_gr$bp2_mate_chr,
+  bp2_mate_pos = cancer_assoc_gr$bp2_mate_pos,
+  bp2_mate_class = cancer_assoc_gr$bp2_mate_class,
+  bp2_joining_nt = cancer_assoc_gr$bp2_joining_nt,
+  bp2_join = cancer_assoc_gr$bp2_join
+)
+
 write.table(
-  as.data.frame(TGCA_cna_assoc_gr),
-  paste0(table_dir, "retrotransposon_breakpoint_assoc_DE_genes_TGCA_CNA_assoc.txt"),
+  cancer_assoc,
+  paste0(table_dir, "final_cancer_gene_and_retrotransposon_assoc_breakpoints.txt"),
   sep = "\t",
-  quote = FALSE,
-  col.names = TRUE,
-  row.names = FALSE
+  quote = F,
+  col.names = T,
+  row.names = F
 )
 
-cancer_cna <- TGCA_cna[TGCA_cna$OncoKB_gene == "Yes",]
-cancer_cna_assoc <- gene_symbols[gene_symbols %in% cancer_cna$Gene]
-cancer_cna_assoc_gr <- TGCA_cna_assoc_gr[
-  TGCA_cna_assoc_gr$symbol %in% cancer_cna_assoc
-]
-write.table(
-  as.data.frame(cancer_cna_assoc_gr),
-  paste0(table_dir, "retrotransposon_breakpoint_assoc_DE_cancer_genes_TGCA_CNA_assoc.txt"),
-  sep = "\t",
-  quote = FALSE,
-  col.names = TRUE,
-  row.names = FALSE
-)
-
-cancer_cna_assoc_df <- data.frame(
-  symbol = cancer_cna_assoc_gr$symbol,
-  sample = cancer_cna_assoc_gr$sample,
-  logFC = cancer_cna_assoc_gr$logFC,
-  FDR = cancer_cna_assoc_gr$FDR,
-  CNA = cancer_cna_assoc_gr$CNA,
-  CNA_freq = cancer_cna_assoc_gr$CNA_freq,
-  CNA2 = cancer_cna_assoc_gr$CNA2,
-  CNA2_freq = cancer_cna_assoc_gr$CNA2_freq
-)
-
-write.table(
-  cancer_cna_assoc_df,
-  paste0(table_dir, "retrotransposon_breakpoint_assoc_DE_cancer_genes_TGCA_CNA_assoc_simple.txt"),
-  sep = "\t",
-  quote = FALSE,
-  col.names = TRUE,
-  row.names = FALSE
-)
-
-
-
-
+save.image(paste0(Robject_dir, "identified_RT_bp_assoc_DE_genes_image.Rdata"))
 

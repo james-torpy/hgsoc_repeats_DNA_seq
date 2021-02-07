@@ -44,7 +44,8 @@ active_RT <- c(
 gtf_samples <- c(
   "AOCS-064", "AOCS-075", "AOCS-076", "AOCS-080", "AOCS-083",
   "AOCS-085", "AOCS-090", "AOCS-094", "AOCS-107", "AOCS-112", 
-  "AOCS-114", "AOCS-116", "AOCS-122"
+  "AOCS-114", "AOCS-116", "AOCS-122", "AOCS-128", "AOCS-130", 
+  "AOCS-133", "AOCS-137"
 )
 
 
@@ -75,15 +76,6 @@ sample_names <- grep(
 sample_names <- sample_names[
   sample_names %in% list.files(manta_dir, pattern = "AOCS")
 ]
-
-######
-sample_names <- sample_names[
-  !(sample_names %in% c(
-    "AOCS-126", "AOCS-128", "AOCS-130", "AOCS-131", 
-    "AOCS-133", "AOCS-137"
-  ))
-]
-######
 
 if (!file.exists(paste0(Robject_dir, "all_breakpoints.Rdata"))) {
 
@@ -136,8 +128,13 @@ if (!file.exists(paste0(Robject_dir, "all_breakpoints.Rdata"))) {
     combined <- c(verified_svaba, verified_manta)
     combined <- combined[!duplicated(combined)]
     
+    # save all low confidence breakpoints to retain mates:
+    low_conf_combined <- c(svaba_gr, manta_gr)
+    low_conf_combined <- low_conf_combined[!duplicated(low_conf_combined)]
+
     # combine:
     if (s==1) {
+
       all_bps <- list(combined)
       names(all_bps)[s] <- sample_names[s] 
       print(
@@ -145,7 +142,17 @@ if (!file.exists(paste0(Robject_dir, "all_breakpoints.Rdata"))) {
           "Total verified breakpoints = ", length(all_bps[[s]])
         )
       )
+
+      low_conf_bps <- list(low_conf_combined)
+      names(low_conf_bps)[s] <- sample_names[s] 
+      print(
+        paste0(
+          "Total non-verified breakpoints = ", length(low_conf_bps[[s]])
+        )
+      )
+
     } else {
+
       all_bps[[s]] <- combined
       names(all_bps)[s] <- sample_names[s] 
       print(
@@ -153,6 +160,15 @@ if (!file.exists(paste0(Robject_dir, "all_breakpoints.Rdata"))) {
           "Total verified breakpoints = ", length(all_bps[[s]])
         )
       )
+
+      low_conf_bps[[s]] <- low_conf_combined
+      names(low_conf_bps)[s] <- sample_names[s] 
+      print(
+        paste0(
+          "Total non-verified breakpoints = ", length(low_conf_bps[[s]])
+        )
+      )
+
     }
   
     writeLines("\n")
@@ -160,6 +176,10 @@ if (!file.exists(paste0(Robject_dir, "all_breakpoints.Rdata"))) {
   }
   
   saveRDS(all_bps, paste0(Robject_dir, "all_breakpoints.Rdata"))
+  saveRDS(
+    low_conf_bps, 
+    paste0(Robject_dir, "all_low_confidence_breakpoints.Rdata")
+  )
 
 } else {
   all_bps <- readRDS(paste0(Robject_dir, "all_breakpoints.Rdata"))
@@ -196,24 +216,6 @@ top_RT_symbols <- return_top_DE(
   max_pval = sig_cutoff,
   min_logfc = logfc_cutoff
 )
-
-## load retrotransposons DE primary vs recurrent cancer:
-#top_prim_vs_rec_RT_symbols <- return_top_DE(
-#  in_dir = recurrent_vs_primary_dir,
-#  up_filename = "recurrent_vs_primary_upregulated_retrotransposon.txt",
-#  down_filename = "recurrent_vs_primary_downregulated_retrotransposon.txt",
-#  max_pval = sig_cutoff,
-#  min_logfc = logfc_cutoff
-#)
-#
-## load retrotransposons DE drug resistant vs sensitive cancer:
-#top_resistant_vs_sensitive_RT_symbols <- return_top_DE(
-#  in_dir = resistant_vs_sensitive_dir,
-#  up_filename = "resistant_vs_sensitive_GIN_upregulated_retrotransposon.txt",
-#  down_filename = "resistant_vs_sensitive_GIN_downregulated_retrotransposon.txt",
-#  max_pval = sig_cutoff,
-#  min_logfc = logfc_cutoff
-#)
 
 top_RT_symbols <- unique(
   c(
@@ -416,6 +418,10 @@ write.table(
 
 for (i in 1:length(gtf_samples)) {
 
+  # create sample directory:
+    sample_dir <- paste0(table_dir, gtf_samples[i], "/")
+    system(paste0("mkdir -p ", sample_dir))
+
   if (
     !file.exists(
       paste0(
@@ -424,10 +430,6 @@ for (i in 1:length(gtf_samples)) {
     )
   ) {
 
-    # create sample directory:
-    sample_dir <- paste0(table_dir, gtf_samples[i], "/")
-    system(paste0("mkdir -p ", sample_dir))
-  
     # save sample e.g.:
     sample_RT_bp <- RT_bp[RT_bp$sample == gtf_samples[i]]
     # add 10000 either side of ranges:
@@ -468,8 +470,5 @@ for (i in 1:length(gtf_samples)) {
   }
 
 }
-
-
-
 
 

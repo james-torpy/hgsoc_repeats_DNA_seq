@@ -9,6 +9,7 @@ in_dir="jt3341/projects/hgsoc_repeats/DNA-seq/raw_files"
 temp_dir="$gadi_dir/mdss/hgsoc_repeats/DNA-seq/raw_files"
 
 sample_name=$1
+tumour_only=$2
 
 #sample_name="AOCS-063-sub"
 
@@ -20,18 +21,35 @@ sl=$(( ( RANDOM % 300 )  + 1 ))
 echo "Sleeping for $sl seconds to avoid rsync issue..."
 sleep $sl
 
+if [ $tumour_only = "true" ]; then
 
-for i in 1 5; do 
+	filename=$sample_name\-1.bam.gz
+  
+    echo "Fetching $filename from mdss..."
+    ssh jt3341@gadi.nci.org.au mdss get $in_dir/$filename $temp_dir
+    
+    echo "Transferring $filename from gadi..."
+    rsync -avPS jt3341@gadi-dm.nci.org.au:$temp_dir/$filename $out_dir
+    
+    echo "Deleting $filename from gadi..."
+    ssh jt3341@gadi.nci.org.au rm $temp_dir/$filename
 
-  filename=$sample_name\-$i.bam.gz
+else
 
-  echo "Fetching $filename from mdss..."
-  ssh jt3341@gadi.nci.org.au mdss get $in_dir/$filename $temp_dir
+  for i in 1 5; do 
   
-  echo "Transferring $filename from gadi..."
-  rsync -avPS jt3341@gadi-dm.nci.org.au:$temp_dir/$filename $out_dir
+    filename=$sample_name\-$i.bam.gz
   
-  echo "Deleting $filename from gadi..."
-  ssh jt3341@gadi.nci.org.au rm $temp_dir/$filename
-  
-done
+    echo "Fetching $filename from mdss..."
+    ssh jt3341@gadi.nci.org.au mdss get $in_dir/$filename $temp_dir
+    
+    echo "Transferring $filename from gadi..."
+    rsync -avPS jt3341@gadi-dm.nci.org.au:$temp_dir/$filename $out_dir
+    
+    echo "Deleting $filename from gadi..."
+    ssh jt3341@gadi.nci.org.au rm $temp_dir/$filename
+    
+  done
+
+fi;
+

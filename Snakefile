@@ -38,53 +38,53 @@ svaba_dir = 'results/svaba/'
 manta_dir = 'results/manta/'
 manta_bin = '/g/data1a/ku3/jt3341/local/lib/manta-1.5.0/bin/'
 
-#SAMPLES = list([
-##    "AOCS-063-sub"
-#	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092",
-#    "AOCS-063", "AOCS-064", "AOCS-065", "AOCS-075", 
-#    "AOCS-076", "AOCS-077", "AOCS-078", "AOCS-080", 
-#    "AOCS-083", "AOCS-084", "AOCS-085","AOCS-086", 
-#    "AOCS-090", "AOCS-091", "AOCS-092", "AOCS-093", 
-#    "AOCS-094", "AOCS-095", "AOCS-107", "AOCS-108", 
-#    "AOCS-109", "AOCS-111", "AOCS-112", "AOCS-113", 
-#    "AOCS-114", "AOCS-115", "AOCS-116", "AOCS-122", 
-#    "AOCS-123", "AOCS-124", "AOCS-125", "AOCS-126", 
-#    "AOCS-128", "AOCS-130", "AOCS-131", "AOCS-133", 
-#    "AOCS-137"
-#    #, "AOCS-143", "AOCS-144", "AOCS-145", 
-##    "AOCS-146", "AOCS-147", "AOCS-148", "AOCS-149", 
-##    "AOCS-153"
-#])
-
-# regenerate bams for:
 SAMPLES = list([
-  "AOCS-064", "AOCS-075", "AOCS-076", "AOCS-080", 
-  "AOCS-083", "AOCS-085"
-#  ,"AOCS-090", "AOCS-107", 
-#  "AOCS-112", "AOCS-114", "AOCS-116",  "AOCS-122", 
+#    "AOCS-063-sub"
+	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092",
+    "AOCS-063", "AOCS-064", "AOCS-065", "AOCS-075", 
+    "AOCS-076", "AOCS-077", "AOCS-078", "AOCS-080", 
+    "AOCS-083", "AOCS-084", "AOCS-085","AOCS-086", 
+    "AOCS-090", "AOCS-091", "AOCS-092", "AOCS-093", 
+    "AOCS-094", "AOCS-095", "AOCS-107", "AOCS-108", 
+    "AOCS-109", "AOCS-111", "AOCS-112", "AOCS-113", 
+    "AOCS-114", "AOCS-115", "AOCS-116", "AOCS-122", 
+    "AOCS-123", "AOCS-124", "AOCS-125", "AOCS-126", 
+    "AOCS-128", "AOCS-130", "AOCS-131", "AOCS-133", 
+    "AOCS-137"
+    #, "AOCS-143", "AOCS-144", "AOCS-145", 
+#    "AOCS-146", "AOCS-147", "AOCS-148", "AOCS-149", 
+#    "AOCS-153"
 ])
+
+## regenerate bams for:
+#SAMPLES = list([
+#  "AOCS-064", "AOCS-075", "AOCS-076", "AOCS-080", 
+#  "AOCS-083", "AOCS-085"
+##  ,"AOCS-090", "AOCS-107", 
+##  "AOCS-112", "AOCS-114", "AOCS-116",  "AOCS-122", 
+#])
 
 ## failed to transfer:
 #SAMPLES = list([
 #    "AOCS-152"
 #])
 
-#rule all:
-#    input:
-#        expand(
-#            'completed_files/{sample}_bams_removed',
-#            sample=SAMPLES
-#        )
-
 rule all:
     input:
         expand(
-            bwa_dir + '{sample}-5.bam',
-            bwa_dir + '{sample}-5.bam.bai',
-            bwa_dir + '{sample}-1.bam',
-            bwa_dir + '{sample}-1.bam.bai',
+            'completed_files/{sample}_bams_removed',
             sample=SAMPLES
         )
+
+#rule all:
+#    input:
+#        expand(
+#            bwa_dir + '{sample}-5.bam',
+#            bwa_dir + '{sample}-5.bam.bai',
+#            bwa_dir + '{sample}-1.bam',
+#            bwa_dir + '{sample}-1.bam.bai',
+#            sample=SAMPLES
+#        )
 
 rule transfer:
     output:
@@ -96,6 +96,7 @@ rule transfer:
         'cd logs/transfer; ' + 
         ' ../../scripts/1.transfer_bam.sh' + 
         ' {wildcards.sample}' +
+        ' false' + # tumour only?
             ' 2> {wildcards.sample}.transfer.errors'
 
 rule gunzip:

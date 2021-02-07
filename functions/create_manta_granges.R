@@ -14,28 +14,32 @@ create_manta_granges <- function(
 
   manta_CNV <- read.table(
     paste0(in_dir, samp_name, "/results/variants/", fname)
-  )[,c(1:2,8)]
-  colnames(manta_CNV) <- c("chr", "pos", "type")
+  )[,c(1:5,8)]
+  colnames(manta_CNV) <- c("chr", "pos", "id", "joining_nt", "join", "info")
 
   # fetch breakpoints at the start of CNVs:
-  manta_CNV_only <- manta_CNV[grep("SVTYPE=BND", manta_CNV$type, invert = T),]
-  manta_CNV_bp1 <- subset(manta_CNV_only, select = c(chr, pos, type))
+  manta_CNV_only <- manta_CNV[grep("SVTYPE=BND", manta_CNV$info, invert = T),]
+  manta_CNV_bp1 <- subset(manta_CNV_only, select = c(chr, pos, id, joining_nt, join, info))
   manta_CNV_bp1$type <- gsub(
     ";.*$", "",
-    gsub("^.*SVTYPE=", "", manta_CNV_bp1$type)
+    gsub("^.*SVTYPE=", "", manta_CNV_bp1$info)
   )
 
   # fetch breakpoints at the end of CNVs:
-  manta_CNV_bp2 <- subset(manta_CNV_only, select = c(chr, type))
+  manta_CNV_bp2 <- subset(manta_CNV_only, select = c(chr, id, joining_nt, join, info))
   manta_CNV_bp2 <- data.frame(
     chr = manta_CNV_bp2$chr,
     pos = gsub(
       ";.*$", "",
-      gsub("END=", "", manta_CNV_bp2$type)
+      gsub("END=", "", manta_CNV_bp2$info)
     ),
+    id = manta_CNV_bp2$id,
+    joining_nt = manta_CNV_bp2$joining_nt,
+    join = manta_CNV_bp2$join,
+    info = manta_CNV_bp2$info,
     type = gsub(
       ";.*$", "",
-      gsub("^.*SVTYPE=", "", manta_CNV_bp2$type)
+      gsub("^.*SVTYPE=", "", manta_CNV_bp2$info)
     )
   )
 
@@ -43,7 +47,7 @@ create_manta_granges <- function(
   manta_CNV_bp <- rbind(manta_CNV_bp1, manta_CNV_bp2)
 
   # fetch other breakpoints:
-  manta_bp <- manta_CNV[grep("BND", manta_CNV$type),]
+  manta_bp <- manta_CNV[grep("BND", manta_CNV$info),]
   manta_bp$type <- "BND"
 
   # join to other breakpoints:
@@ -66,9 +70,6 @@ create_manta_granges <- function(
     )
   )
   
-#  # create column with both chr and pos info:
-#  manta_bp$joint <- paste0(manta_bp$chr, "_", manta_bp$pos)
-
   # create GRanges of bps with 100 base pair window:
   manta_bp$pos <- as.numeric(manta_bp$pos)
   
@@ -81,8 +82,12 @@ create_manta_granges <- function(
       ),
       strand = Rle("*"),
       bp = manta_bp$pos,
+      id = manta_bp$id,
       CNV_type = manta_bp$type,
-      sample = samp_name
+      sample = samp_name,
+      joining_nt = manta_bp$joining_nt,
+      join_nt = manta_bp$join,
+      bp_info = manta_bp$info
     )
   )
 

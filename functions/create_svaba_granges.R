@@ -14,9 +14,9 @@ create_svaba_granges <- function(
 
   svaba_bp <- read.table(
     paste0(in_dir, sample_names[s], "/", sample_names[s], fname)
-  )[,c(1:2,8)]
-  colnames(svaba_bp) <- c("chr", "pos", "type")
-  svaba_bp$type <- gsub("^.*;SVTYPE=", "", svaba_bp$type)
+  )[,c(1:5,8)]
+  colnames(svaba_bp) <- c("chr", "pos", "id", "joining_nt", "join", "info")
+  svaba_bp$type <- gsub("^.*;SVTYPE=", "", svaba_bp$info)
   
   # isolate breakpoints
   print(
@@ -47,8 +47,12 @@ create_svaba_granges <- function(
       ),
       strand = Rle("*"),
       bp = svaba_bp$pos,
+      id = svaba_bp$id,
       CNV_type = svaba_bp$type,
-      sample = samp_name
+      sample = samp_name,
+      joining_nt = svaba_bp$joining_nt,
+      join = svaba_bp$join,
+      bp_info = svaba_bp$info
     )
   )
 
