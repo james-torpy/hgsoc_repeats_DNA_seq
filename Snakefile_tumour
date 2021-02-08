@@ -61,8 +61,8 @@ SAMPLES = list([
     "AOCS-063-sub",
     "AOCS-064", "AOCS-075", "AOCS-076", "AOCS-083", 
     "AOCS-112", "AOCS-114", "AOCS-122",
-    "AOCS-128", "AOCS-130", "AOCS-133", "AOCS-137"
-    #"AOCS-080", "AOCS-085" 
+    "AOCS-128", "AOCS-130", "AOCS-133", "AOCS-137",
+    "AOCS-080", "AOCS-085" 
 ])
 
 ## failed to transfer:

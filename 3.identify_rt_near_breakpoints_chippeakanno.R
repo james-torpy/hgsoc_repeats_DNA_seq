@@ -471,4 +471,5 @@ for (i in 1:length(gtf_samples)) {
 
 }
 
+save.image(paste0(Robject_dir, "identified_rt_near_bp_image.Rdata"))
 

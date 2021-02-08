@@ -109,7 +109,7 @@ oncokb_genes <- gene_symbols[gene_symbols %in% oncokb$symbol]
 # add custom cancer genes:
 cancer_genes <- c(
   oncokb_genes,
-  "CXCR2", "TOX", "UBE2C", "FGF18"
+  "CXCR2", "UBE2C"
 )
 
 cancer_assoc_gr <- DE_RT_bp_genes[
