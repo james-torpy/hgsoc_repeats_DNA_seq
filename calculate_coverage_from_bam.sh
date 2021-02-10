@@ -16,13 +16,23 @@ genome_dir="$project_dir/genome"
 #
 #for f in $in_dir/*.bam; do
 #
-#  sample_name=$(echo $f | sed "s/.bam//" | sed "s/^.*\///")
+#	sample_name=$(echo $f | sed "s/.bam//" | sed "s/^.*\///")
 #
-#  qsub -pe smp 6 -N $sample_name.genomecov -wd $log_dir -b y -j y -V \
-#    -P TumourProgression $script_dir/calculate_coverage_from_bam.sh $sample_name
+#	if [ ! -f "$in_dir/$sample_name.coverage.bed" ]; then
+#
+#	  echo "Calculating coverage of $f.."
+#
+#	  qsub -pe smp 6 -N $sample_name.genomecov -wd $log_dir -b y -j y -V \
+#	    -P TumourProgression $script_dir/calculate_coverage_from_bam.sh $sample_name
+#
+#	else
+#
+#	  echo "Coverage already calculated for $f..."
+#
+#	fi;
 #
 #done;
-#######
+######
 
 sample_name=$1
 

@@ -1,5 +1,5 @@
 # Run command:
-# snakemake --reason --use-conda --cores 210 --cluster-config cluster.json --cluster 'qsub -pe smp {cluster.cores} -N cnv_ident.smk -wd '/share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/logs' -b y -j y -V -P TumourProgression' -j 6
+# snakemake --reason --use-conda --cores 210 --cluster-config cluster.json --cluster 'qsub -pe smp {cluster.cores} -N cnv_ident.smk -wd '/share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/logs' -b y -j y -V -P TumourProgression' -j 4
 
 # DAG command:
 # snakemake --dag | dot -Tsvg > dag.svg
@@ -13,7 +13,7 @@
 # awk '{print $1}' /share/ScratchGeneral/jamtor/projects/hgsoc_repeats/DNA-seq/quota_track.txt | \
 # grep -v GB | grep -v [a-zA-Z] | sort | uniq | tail -1
 
-# max genomes than can be run at one one time (based on 10 TB quota): 6, and 5 in queue
+# max genomes than can be run at one one time (based on 10 TB quota): 7, and 6 in queue
 
 # define directories:
 project_name = 'hgsoc_repeats'
@@ -40,19 +40,18 @@ manta_bin = '/g/data1a/ku3/jt3341/local/lib/manta-1.5.0/bin/'
 
 SAMPLES = list([
 #    "AOCS-063-sub"
-	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092",
-    "AOCS-063", "AOCS-064", "AOCS-065", "AOCS-075", 
-    "AOCS-076", "AOCS-077", "AOCS-078", "AOCS-080", 
-    "AOCS-083", "AOCS-084", "AOCS-085","AOCS-086", 
-    "AOCS-090", "AOCS-091", "AOCS-092", "AOCS-093", 
-    "AOCS-094", "AOCS-095", "AOCS-107", "AOCS-108", 
-    "AOCS-109", "AOCS-111", "AOCS-112", "AOCS-113", 
-    "AOCS-114", "AOCS-115", "AOCS-116", "AOCS-122", 
-    "AOCS-123", "AOCS-124", "AOCS-125", "AOCS-126", 
-    "AOCS-128", "AOCS-130", "AOCS-131", "AOCS-133", 
-    "AOCS-137"
-    #, "AOCS-143", "AOCS-144", "AOCS-145", 
-#    "AOCS-146", "AOCS-147", "AOCS-148", "AOCS-149", 
+#	"AOCS-083", "AOCS-085", "AOCS-090", "AOCS-092",
+#    "AOCS-063", "AOCS-064", "AOCS-065", "AOCS-075", 
+#    "AOCS-076", "AOCS-077", "AOCS-078", "AOCS-080", 
+#    "AOCS-083", "AOCS-084", "AOCS-085","AOCS-086", 
+#    "AOCS-090", "AOCS-091", "AOCS-092", "AOCS-093", 
+#    "AOCS-094", "AOCS-095", "AOCS-107", "AOCS-108", 
+#    "AOCS-109", "AOCS-111", "AOCS-112", "AOCS-113", 
+#    "AOCS-114", "AOCS-115", "AOCS-116", "AOCS-122", 
+#    "AOCS-123", "AOCS-124", "AOCS-125", "AOCS-126", 
+#    "AOCS-128", "AOCS-130", "AOCS-131", "AOCS-133", 
+#    "AOCS-137", 
+    "AOCS-146", "AOCS-147", "AOCS-148", "AOCS-149", 
 #    "AOCS-153"
 ])
 
@@ -64,9 +63,9 @@ SAMPLES = list([
 ##  "AOCS-112", "AOCS-114", "AOCS-116",  "AOCS-122", 
 #])
 
-## failed to transfer:
+## failed:
 #SAMPLES = list([
-#    "AOCS-152"
+#    "AOCS-152", "AOCS-145", "AOCS-144", "AOCS-143", 
 #])
 
 rule all:
